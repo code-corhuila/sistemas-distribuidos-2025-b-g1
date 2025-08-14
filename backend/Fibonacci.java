@@ -10,12 +10,13 @@ public class Fibonacci {
     }
 
     public static void fibonnacci(int n) {
+        String mensaje = "";
         if (n < 0) {
-            System.out.println("Argumento invalido");
+            mensaje = "Argumento invalido";
         } else if (n >= 0) {
-            System.out.println("0");
+            mensaje = "0";
             if (n > 0) {
-                System.out.println("1");
+                mensaje = mensaje + ", 1";
                 int a = 0;
                 int b = 1;
                 int f_n;
@@ -23,10 +24,10 @@ public class Fibonacci {
                     f_n = a + b;
                     a = b;
                     b = f_n;
-                    System.out.println(f_n);
-
+                    mensaje = mensaje + ", " + f_n;
                 }
             }
         }
+        JOptionPane.showMessageDialog(null, mensaje);
     }
 }
