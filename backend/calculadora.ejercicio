@@ -3,7 +3,6 @@ import java.util.Scanner;
 
 public class CalculadoraConHistorial {
 
-
     private static ArrayList<String> historial = new ArrayList<>();
 
     public static void main(String[] args) {
@@ -17,7 +16,8 @@ public class CalculadoraConHistorial {
             System.out.println("3. Multiplicar");
             System.out.println("4. Dividir");
             System.out.println("5. Ver historial");
-            System.out.println("6. Salir");
+            System.out.println("6. Borrar historial"); // 🔹 Nueva opción
+            System.out.println("7. Salir");
             System.out.print("Selecciona una opción: ");
             opcion = sc.nextInt();
 
@@ -72,7 +72,10 @@ public class CalculadoraConHistorial {
                     mostrarHistorial();
                     break;
 
-                case 6:
+                    borrarHistorial();
+                    break;
+
+                case 7:
                     System.out.println("Saliendo de la calculadora...");
                     break;
 
@@ -80,17 +83,15 @@ public class CalculadoraConHistorial {
                     System.out.println("Opción no válida. Intenta de nuevo.");
             }
 
-        } while (opcion != 6);
+        } while (opcion != 7);
 
         sc.close();
     }
 
-   
     private static void guardarHistorial(String operacion) {
         historial.add(operacion);
     }
 
-   
     private static void mostrarHistorial() {
         System.out.println("\n===== HISTORIAL =====");
         if (historial.isEmpty()) {
@@ -99,6 +100,16 @@ public class CalculadoraConHistorial {
             for (String registro : historial) {
                 System.out.println(registro);
             }
+        }
+    }
+
+    
+    private static void borrarHistorial() {
+        if (historial.isEmpty()) {
+            System.out.println("El historial ya está vacío.");
+        } else {
+            historial.clear();
+            System.out.println("Historial borrado correctamente.");
         }
     }
 }
