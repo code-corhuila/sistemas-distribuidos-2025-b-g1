@@ -1,0 +1,104 @@
+import java.util.ArrayList;
+import java.util.Scanner;
+
+public class CalculadoraConHistorial {
+
+
+    private static ArrayList<String> historial = new ArrayList<>();
+
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        int opcion;
+
+        do {
+            System.out.println("\n===== CALCULADORA BÁSICA =====");
+            System.out.println("1. Sumar");
+            System.out.println("2. Restar");
+            System.out.println("3. Multiplicar");
+            System.out.println("4. Dividir");
+            System.out.println("5. Ver historial");
+            System.out.println("6. Salir");
+            System.out.print("Selecciona una opción: ");
+            opcion = sc.nextInt();
+
+            double num1, num2, resultado;
+
+            switch (opcion) {
+                case 1:
+                    System.out.print("Ingresa el primer número: ");
+                    num1 = sc.nextDouble();
+                    System.out.print("Ingresa el segundo número: ");
+                    num2 = sc.nextDouble();
+                    resultado = num1 + num2;
+                    guardarHistorial(num1 + " + " + num2 + " = " + resultado);
+                    System.out.println("Resultado: " + resultado);
+                    break;
+
+                case 2:
+                    System.out.print("Ingresa el primer número: ");
+                    num1 = sc.nextDouble();
+                    System.out.print("Ingresa el segundo número: ");
+                    num2 = sc.nextDouble();
+                    resultado = num1 - num2;
+                    guardarHistorial(num1 + " - " + num2 + " = " + resultado);
+                    System.out.println("Resultado: " + resultado);
+                    break;
+
+                case 3:
+                    System.out.print("Ingresa el primer número: ");
+                    num1 = sc.nextDouble();
+                    System.out.print("Ingresa el segundo número: ");
+                    num2 = sc.nextDouble();
+                    resultado = num1 * num2;
+                    guardarHistorial(num1 + " * " + num2 + " = " + resultado);
+                    System.out.println("Resultado: " + resultado);
+                    break;
+
+                case 4:
+                    System.out.print("Ingresa el primer número: ");
+                    num1 = sc.nextDouble();
+                    System.out.print("Ingresa el segundo número: ");
+                    num2 = sc.nextDouble();
+                    if (num2 != 0) {
+                        resultado = num1 / num2;
+                        guardarHistorial(num1 + " / " + num2 + " = " + resultado);
+                        System.out.println("Resultado: " + resultado);
+                    } else {
+                        System.out.println("Error: No se puede dividir entre 0.");
+                    }
+                    break;
+
+                case 5:
+                    mostrarHistorial();
+                    break;
+
+                case 6:
+                    System.out.println("Saliendo de la calculadora...");
+                    break;
+
+                default:
+                    System.out.println("Opción no válida. Intenta de nuevo.");
+            }
+
+        } while (opcion != 6);
+
+        sc.close();
+    }
+
+   
+    private static void guardarHistorial(String operacion) {
+        historial.add(operacion);
+    }
+
+   
+    private static void mostrarHistorial() {
+        System.out.println("\n===== HISTORIAL =====");
+        if (historial.isEmpty()) {
+            System.out.println("No hay operaciones registradas.");
+        } else {
+            for (String registro : historial) {
+                System.out.println(registro);
+            }
+        }
+    }
+}
