@@ -1,14 +1,22 @@
-# Versión: develop
-# Calculadora básica sin validaciones ni historial
+# Calculadora básica - HU-1
+# Versión inicial: solo suma y resta
 
-def calcular(op, a, b):
-    if op == "1":
-        return a + b
-    elif op == "2":
-        return a - b
-    elif op == "3":
-        return a * b
-    elif op == "4":
-        return a / b
+historial = []
 
-print("Resultado:", calcular("1", 4, 2))  # Ejemplo simple
+def sumar(a, b):
+    resultado = a + b
+    historial.append(f"{a} + {b} = {resultado}")
+    return resultado
+
+def restar(a, b):
+    resultado = a - b
+    historial.append(f"{a} - {b} = {resultado}")
+    return resultado
+
+# Ejemplo de uso
+print("Suma:", sumar(5, 3))
+print("Resta:", restar(10, 4))
+
+print("\nHistorial de operaciones:")
+for operacion in historial:
+    print(operacion)
