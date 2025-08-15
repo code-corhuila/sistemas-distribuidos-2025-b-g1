@@ -105,9 +105,3 @@ public class CalculadoraConHistorial {
         }
     }
 
-
-    private static void limpiarHistorial() {
-        historial.clear();
-        System.out.println(" Historial borrado con éxito.");
-    }
-}
