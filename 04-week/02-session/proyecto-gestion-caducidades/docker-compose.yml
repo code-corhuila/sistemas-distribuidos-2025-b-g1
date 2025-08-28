@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # =====================================================
+  # Base de Datos PostgreSQL
+  # =====================================================
+  db:
+    image: postgres:15-alpine
+    container_name: gestion-caducidades-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gestion_caducidades
+      POSTGRES_USER: admin_gestion
+      POSTGRES_PASSWORD: password123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=es_CO.UTF-8 --lc-ctype=es_CO.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema_v0.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/seeds_v0.sql:/docker-entrypoint-initdb.d/02-seeds.sql
+    networks:
+      - gestion-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin_gestion -d gestion_caducidades"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =====================================================
+  # Administrador de BD (pgAdmin)
+  # =====================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: gestion-caducidades-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@corhuila.edu.co
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - gestion-network
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # =====================================================
+  # API Backend (Spring Boot) - Opcional para desarrollo
+  # =====================================================
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: gestion-caducidades-api
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: gestion_caducidades
+      DB_USER: admin_gestion
+      DB_PASSWORD: password123
+    ports:
+      - "8090:8080"
+    volumes:
+      - ./backend:/app
+      - maven_cache:/root/.m2
+    networks:
+      - gestion-network
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - full-stack
+
+  # =====================================================
+  # Frontend (Angular) - Opcional para desarrollo
+  # =====================================================
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: gestion-caducidades-web
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://api:8080
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./frontend:/app
+      - node_modules_cache:/app/node_modules
+    networks:
+      - gestion-network
+    depends_on:
+      - api
+    profiles:
+      - full-stack
+
+  # =====================================================
+  # Redis para Cache (opcional - futuro)
+  # =====================================================
+  redis:
+    image: redis:7-alpine
+    container_name: gestion-caducidades-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - gestion-network
+    profiles:
+      - cache
+
+# =====================================================
+# Volúmenes Persistentes
+# =====================================================
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  redis_data:
+    driver: local
+  maven_cache:
+    driver: local
+  node_modules_cache:
+    driver: local
+
+# =====================================================
+# Red Interna
+# =====================================================
+networks:
+  gestion-network:
+    driver: bridge
+    name: gestion-caducidades-network

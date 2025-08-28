@@ -1,0 +1,1100 @@
+openapi: 3.0.3
+info:
+  title: Sistema de Gestión de Inventario - Control de Caducidades
+  description: |
+    API REST para la gestión de inventario enfocada en el control de productos próximos a vencer.
+    
+    ## Funcionalidades principales:
+    - Gestión de productos y proveedores
+    - Control de lotes con fechas de vencimiento
+    - Sistema de alertas por semáforo (rojo/ámbar/verde)
+    - Importación masiva CSV
+    - Reportes PDF automáticos
+    - Auditoría de movimientos
+    
+    ## Criterios de rendimiento:
+    - p95 < 1s para consultas de hasta 5,000 registros
+    - Exactitud ≥95% en alertas de vencimiento
+    
+  version: '1.0.0'
+  contact:
+    name: Equipo Desarrollo CORHUILA
+    email: sistemas@corhuila.edu.co
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Servidor de desarrollo local
+  - url: https://api-gestion-caducidades.corhuila.edu.co/api/v1
+    description: Servidor de producción
+
+tags:
+  - name: products
+    description: Gestión de productos
+  - name: suppliers
+    description: Gestión de proveedores
+  - name: batches
+    description: Gestión de lotes e inventario
+  - name: alerts
+    description: Sistema de alertas y semáforos
+  - name: reports
+    description: Generación de reportes
+  - name: import
+    description: Importación masiva de datos
+  - name: audit
+    description: Auditoría y trazabilidad
+  - name: auth
+    description: Autenticación y autorización
+
+paths:
+  # =====================================================
+  # GESTIÓN DE PRODUCTOS
+  # =====================================================
+  /products:
+    get:
+      tags: [products]
+      summary: Listar productos
+      description: Obtiene una lista paginada de productos con filtros opcionales
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: q
+          in: query
+          description: Búsqueda por nombre o SKU
+          schema:
+            type: string
+          example: "leche"
+        - name: category
+          in: query
+          description: Filtro por categoría
+          schema:
+            type: string
+          example: "LACTEOS"
+        - name: supplierId
+          in: query
+          description: Filtro por proveedor
+          schema:
+            type: string
+            format: uuid
+        - name: isActive
+          in: query
+          description: Filtro por estado activo
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Lista de productos obtenida exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [products]
+      summary: Crear producto
+      description: Crea un nuevo producto en el catálogo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Producto creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: SKU ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /products/{productId}:
+    get:
+      tags: [products]
+      summary: Obtener producto por ID
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [products]
+      summary: Actualizar producto
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Producto actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [products]
+      summary: Eliminar producto (soft delete)
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Producto eliminado exitosamente
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: No se puede eliminar, tiene lotes activos
+
+  # =====================================================
+  # GESTIÓN DE LOTES
+  # =====================================================
+  /batches:
+    get:
+      tags: [batches]
+      summary: Listar lotes
+      description: Obtiene lotes con filtros por vencimiento y prioridad
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: productId
+          in: query
+          description: Filtro por producto
+          schema:
+            type: string
+            format: uuid
+        - name: daysToExpire
+          in: query
+          description: Máximo días para vencer
+          schema:
+            type: integer
+            minimum: 0
+          example: 30
+        - name: priority
+          in: query
+          description: Filtro por prioridad de vencimiento
+          schema:
+            type: string
+            enum: [RED, AMBER, GREEN]
+        - name: location
+          in: query
+          description: Filtro por ubicación
+          schema:
+            type: string
+          example: "ESTANTE-A1"
+        - name: status
+          in: query
+          description: Filtro por estado del lote
+          schema:
+            type: string
+            enum: [ACTIVE, EXPIRED, SOLD_OUT]
+            default: ACTIVE
+      responses:
+        '200':
+          description: Lista de lotes obtenida exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedBatchResponse'
+
+    post:
+      tags: [batches]
+      summary: Crear lote
+      description: Registra un nuevo lote de producto con fecha de vencimiento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBatchRequest'
+      responses:
+        '201':
+          description: Lote creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResponse'
+
+  /batches/{batchId}:
+    get:
+      tags: [batches]
+      summary: Obtener detalle de lote
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalle del lote
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchDetailResponse'
+
+    put:
+      tags: [batches]
+      summary: Actualizar lote
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBatchRequest'
+      responses:
+        '200':
+          description: Lote actualizado exitosamente
+
+  /batches/{batchId}/movements:
+    get:
+      tags: [batches]
+      summary: Historial de movimientos del lote
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Historial de movimientos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedMovementResponse'
+
+    post:
+      tags: [batches]
+      summary: Registrar movimiento de stock
+      description: Registra entrada, salida o ajuste de inventario
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovementRequest'
+      responses:
+        '201':
+          description: Movimiento registrado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementResponse'
+
+  # =====================================================
+  # SISTEMA DE ALERTAS
+  # =====================================================
+  /alerts/near-expiry:
+    get:
+      tags: [alerts]
+      summary: Obtener productos próximos a vencer
+      description: Lista productos con sistema de semáforo por días de vencimiento
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: maxDays
+          in: query
+          description: Máximo días para considerar próximo a vencer
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 365
+        - name: priority
+          in: query
+          description: Filtro por prioridad
+          schema:
+            type: string
+            enum: [RED, AMBER, GREEN]
+        - name: minValue
+          in: query
+          description: Valor mínimo del lote para incluir en alerta
+          schema:
+            type: number
+            format: decimal
+      responses:
+        '200':
+          description: Lista de alertas de vencimiento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedExpiryAlertResponse'
+
+  /alerts/dashboard:
+    get:
+      tags: [alerts]
+      summary: Dashboard de alertas
+      description: Resumen ejecutivo con métricas de vencimiento
+      responses:
+        '200':
+          description: Métricas del dashboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDashboardResponse'
+
+  # =====================================================
+  # REPORTES
+  # =====================================================
+  /reports/weekly-expiry:
+    get:
+      tags: [reports]
+      summary: Reporte semanal de vencimientos
+      description: Genera reporte PDF con top N productos próximos a vencer
+      parameters:
+        - name: top
+          in: query
+          description: Cantidad de productos a incluir
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: format
+          in: query
+          description: Formato del reporte
+          schema:
+            type: string
+            enum: [pdf, excel, csv]
+            default: pdf
+        - name: includeCharts
+          in: query
+          description: Incluir gráficos en el reporte
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Reporte generado exitosamente
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+
+  /reports/inventory-summary:
+    get:
+      tags: [reports]
+      summary: Resumen de inventario
+      description: Reporte consolidado de todo el inventario
+      parameters:
+        - name: groupBy
+          in: query
+          description: Agrupar resultados por
+          schema:
+            type: string
+            enum: [category, supplier, location, priority]
+            default: category
+        - name: includeExpired
+          in: query
+          description: Incluir productos vencidos
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Resumen de inventario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventorySummaryResponse'
+
+  # =====================================================
+  # IMPORTACIÓN
+  # =====================================================
+  /import/validate:
+    post:
+      tags: [import]
+      summary: Validar archivo CSV
+      description: Valida estructura y contenido del archivo antes de importar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo CSV a validar
+                skipValidation:
+                  type: boolean
+                  description: Omitir validaciones no críticas
+                  default: false
+      responses:
+        '200':
+          description: Validación completada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportValidationResponse'
+
+  /import/process:
+    post:
+      tags: [import]
+      summary: Procesar importación
+      description: Ejecuta la importación masiva de datos validados
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                options:
+                  $ref: '#/components/schemas/ImportOptions'
+      responses:
+        '202':
+          description: Importación iniciada (proceso asíncrono)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJobResponse'
+
+  /import/jobs/{jobId}:
+    get:
+      tags: [import]
+      summary: Estado de importación
+      description: Consulta el progreso de un trabajo de importación
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Estado del trabajo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJobStatusResponse'
+
+  /import/template:
+    get:
+      tags: [import]
+      summary: Descargar plantilla CSV
+      description: Descarga plantilla con formato correcto para importación
+      parameters:
+        - name: type
+          in: query
+          description: Tipo de plantilla
+          schema:
+            type: string
+            enum: [products, batches, full]
+            default: full
+      responses:
+        '200':
+          description: Plantilla CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+
+# =====================================================
+# COMPONENTES REUTILIZABLES
+# =====================================================
+components:
+  schemas:
+    # Entidades principales
+    ProductResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          example: "PROD-001"
+        name:
+          type: string
+          example: "Leche Entera 1L"
+        description:
+          type: string
+          example: "Leche pasteurizada entera en bolsa"
+        category:
+          type: string
+          example: "LACTEOS"
+        unit:
+          type: string
+          example: "L"
+        minStock:
+          type: integer
+          example: 50
+        supplierId:
+          type: string
+          format: uuid
+        supplierName:
+          type: string
+          example: "Lácteos San Agustín"
+        isActive:
+          type: boolean
+        totalStock:
+          type: integer
+          description: Stock total calculado de todos los lotes activos
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BatchResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        productName:
+          type: string
+          example: "Leche Entera 1L"
+        batchCode:
+          type: string
+          example: "LOTE-2025-001"
+        expirationDate:
+          type: string
+          format: date
+          example: "2025-09-15"
+        productionDate:
+          type: string
+          format: date
+          example: "2025-08-01"
+        quantity:
+          type: integer
+          example: 100
+        cost:
+          type: number
+          format: decimal
+          example: 2500.00
+        location:
+          type: string
+          example: "ESTANTE-A1"
+        status:
+          type: string
+          enum: [ACTIVE, EXPIRED, SOLD_OUT]
+        daysToExpire:
+          type: integer
+          description: Días restantes para vencimiento
+        priority:
+          type: string
+          enum: [RED, AMBER, GREEN]
+          description: Prioridad basada en días de vencimiento
+        totalValue:
+          type: number
+          format: decimal
+          description: Valor total del lote (quantity * cost)
+        createdAt:
+          type: string
+          format: date-time
+
+    ExpiryAlertResponse:
+      type: object
+      properties:
+        batchId:
+          type: string
+          format: uuid
+        batchCode:
+          type: string
+        productId:
+          type: string
+          format: uuid
+        productName:
+          type: string
+        sku:
+          type: string
+        category:
+          type: string
+        expirationDate:
+          type: string
+          format: date
+        daysToExpire:
+          type: integer
+        priority:
+          type: string
+          enum: [RED, AMBER, GREEN]
+        quantity:
+          type: integer
+        totalValue:
+          type: number
+          format: decimal
+        location:
+          type: string
+        supplierName:
+          type: string
+
+    # Requests
+    CreateProductRequest:
+      type: object
+      required: [sku, name, unit, supplierId]
+      properties:
+        sku:
+          type: string
+          pattern: '^[A-Z0-9-]+$'
+          example: "PROD-001"
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          example: "Leche Entera 1L"
+        description:
+          type: string
+          maxLength: 1000
+        category:
+          type: string
+          example: "LACTEOS"
+        unit:
+          type: string
+          enum: [UNIT, KG, L, ML, G, PACK]
+        minStock:
+          type: integer
+          minimum: 0
+          default: 0
+        supplierId:
+          type: string
+          format: uuid
+
+    CreateBatchRequest:
+      type: object
+      required: [productId, batchCode, expirationDate, quantity, cost]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        batchCode:
+          type: string
+          pattern: '^[A-Z0-9-]+$'
+          example: "LOTE-2025-001"
+        expirationDate:
+          type: string
+          format: date
+          example: "2025-12-31"
+        productionDate:
+          type: string
+          format: date
+          example: "2025-08-01"
+        quantity:
+          type: integer
+          minimum: 1
+          example: 100
+        cost:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 2500.00
+        location:
+          type: string
+          example: "ESTANTE-A1"
+
+    CreateMovementRequest:
+      type: object
+      required: [movementType, quantity, reason]
+      properties:
+        movementType:
+          type: string
+          enum: [IN, OUT, ADJ]
+        quantity:
+          type: integer
+          description: Para OUT y ADJ puede ser negativo
+        reason:
+          type: string
+          enum: [PURCHASE, SALE, EXPIRED, DAMAGED, ADJUSTMENT, TRANSFER]
+        note:
+          type: string
+          maxLength: 500
+          example: "Venta a cliente mayorista"
+
+    # Responses paginadas
+    PagedProductResponse:
+      allOf:
+        - $ref: '#/components/schemas/PagedResponse'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProductResponse'
+
+    PagedBatchResponse:
+      allOf:
+        - $ref: '#/components/schemas/PagedResponse'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/BatchResponse'
+
+    PagedExpiryAlertResponse:
+      allOf:
+        - $ref: '#/components/schemas/PagedResponse'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/ExpiryAlertResponse'
+            summary:
+              type: object
+              properties:
+                totalCritical:
+                  type: integer
+                  description: Total de alertas rojas
+                totalWarning:
+                  type: integer
+                  description: Total de alertas ámbar
+                totalValue:
+                  type: number
+                  format: decimal
+                  description: Valor total en riesgo
+
+    PagedResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items: {}
+        page:
+          type: object
+          properties:
+            size:
+              type: integer
+            number:
+              type: integer
+            totalElements:
+              type: integer
+            totalPages:
+              type: integer
+            first:
+              type: boolean
+            last:
+              type: boolean
+
+    # Dashboard y métricas
+    AlertDashboardResponse:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            totalProducts:
+              type: integer
+            totalBatches:
+              type: integer
+            activeBatches:
+              type: integer
+            expiredBatches:
+              type: integer
+        priorities:
+          type: object
+          properties:
+            red:
+              type: object
+              properties:
+                count:
+                  type: integer
+                totalValue:
+                  type: number
+                  format: decimal
+            amber:
+              type: object
+              properties:
+                count:
+                  type: integer
+                totalValue:
+                  type: number
+                  format: decimal
+            green:
+              type: object
+              properties:
+                count:
+                  type: integer
+                totalValue:
+                  type: number
+                  format: decimal
+        topCategories:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              criticalItems:
+                type: integer
+              totalValue:
+                type: number
+                format: decimal
+        recentActivity:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              expiredItems:
+                type: integer
+              totalLoss:
+                type: number
+                format: decimal
+
+    # Importación
+    ImportValidationResponse:
+      type: object
+      properties:
+        isValid:
+          type: boolean
+        totalRows:
+          type: integer
+        validRows:
+          type: integer
+        errorRows:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              field:
+                type: string
+              message:
+                type: string
+              severity:
+                type: string
+                enum: [ERROR, WARNING]
+        preview:
+          type: array
+          items:
+            type: object
+          description: Primeras 10 filas válidas como preview
+
+    ImportJobResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+        estimatedDuration:
+          type: integer
+          description: Duración estimada en segundos
+
+    ImportJobStatusResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+        progress:
+          type: object
+          properties:
+            totalRows:
+              type: integer
+            processedRows:
+              type: integer
+            successfulRows:
+              type: integer
+            errorRows:
+              type: integer
+            percentage:
+              type: number
+              format: float
+        result:
+          type: object
+          properties:
+            productsCreated:
+              type: integer
+            batchesCreated:
+              type: integer
+            errors:
+              type: array
+              items:
+                type: string
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    ImportOptions:
+      type: object
+      properties:
+        skipDuplicates:
+          type: boolean
+          default: true
+        updateExisting:
+          type: boolean
+          default: false
+        createMissingSuppliers:
+          type: boolean
+          default: false
+        validateDates:
+          type: boolean
+          default: true
+        batchSize:
+          type: integer
+          default: 100
+          minimum: 10
+          maximum: 1000
+
+    # Responses genéricas
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Número de página (base 0)
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    SizeParam:
+      name: size
+      in: query
+      description: Tamaño de página
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: No autorizado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []
